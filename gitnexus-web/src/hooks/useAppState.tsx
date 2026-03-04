@@ -147,6 +147,14 @@ interface AppState {
   switchRepo: (repoName: string) => Promise<void>;
   setCurrentRepo: (repoName: string) => void;
 
+  // WebContainer state
+  isWebContainerOpen: boolean;
+  setWebContainerOpen: (isOpen: boolean) => void;
+  webContainerUrl: string | null;
+  setWebContainerUrl: (url: string | null) => void;
+  webContainerTerminalOutput: string;
+  setWebContainerTerminalOutput: (output: string | ((prev: string) => string)) => void;
+
   // Worker API (shared across app)
   runQuery: (cypher: string) => Promise<any[]>;
   isDatabaseReady: () => Promise<boolean>;
@@ -318,6 +326,11 @@ const AppStateProviderInner = ({ children }: { children: ReactNode }) => {
   // Multi-repo switching
   const [serverBaseUrl, setServerBaseUrl] = useState<string | null>(null);
   const [availableRepos, setAvailableRepos] = useState<BackendRepo[]>([]);
+
+  // WebContainer state
+  const [isWebContainerOpen, setWebContainerOpen] = useState(false);
+  const [webContainerUrl, setWebContainerUrl] = useState<string | null>(null);
+  const [webContainerTerminalOutput, setWebContainerTerminalOutput] = useState('');
 
   // Embedding state
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus>('idle');
@@ -1230,6 +1243,13 @@ const AppStateProviderInner = ({ children }: { children: ReactNode }) => {
     setAvailableRepos,
     switchRepo,
     setCurrentRepo,
+    // WebContainer state
+    isWebContainerOpen,
+    setWebContainerOpen,
+    webContainerUrl,
+    setWebContainerUrl,
+    webContainerTerminalOutput,
+    setWebContainerTerminalOutput,
     runQuery,
     isDatabaseReady,
     // Embedding state and methods

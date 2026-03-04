@@ -10,6 +10,8 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
+  Play,
+  Zap,
 } from '@/lib/lucide-icons';
 import { useAppState } from '../hooks/useAppState';
 import {
@@ -63,6 +65,7 @@ export const Header = ({
     rightPanelTab,
     setSettingsPanelOpen,
     setHelpDialogBoxOpen,
+    setWebContainerOpen,
   } = useAppState();
   const [searchQuery, setSearchQuery] = useState('');
   const [isRepoDropdownOpen, setIsRepoDropdownOpen] = useState(false);
@@ -433,6 +436,17 @@ export const Header = ({
 
       {/* Right section */}
       <div className="flex items-center gap-2">
+        {/* Marketplace Button */}
+        <a
+          href="https://gitnexus-marketplace.vercel.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-lg text-white text-sm font-medium shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+        >
+          <Sparkles className="w-4 h-4 text-blue-200" />
+          <span className="hidden sm:inline">Marketplace</span>
+        </a>
+
         {/* GitHub Star Button */}
         <a
           href="https://github.com/abhigyanpatwari/GitNexus"
@@ -472,6 +486,30 @@ export const Header = ({
         >
           <HelpCircle className="h-4.5 w-4.5" />
         </button>
+
+        {/* Run Web App Button (Only show if repo has package.json or gitnexus.json) */}
+        {graph && graph.nodes.some(n => n.label === 'File' && (n.properties.name === 'package.json' || n.properties.name === 'gitnexus.json')) && (
+          <button
+            onClick={() => setWebContainerOpen(true)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-all text-white shadow-glow hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${graph.nodes.some(n => n.label === 'File' && n.properties.name === 'gitnexus.json')
+              ? 'bg-gradient-to-r from-yellow-500 to-amber-600'
+              : 'bg-gradient-to-r from-green-500 to-emerald-600'
+              }`}
+            title={graph.nodes.some(n => n.label === 'File' && n.properties.name === 'gitnexus.json') ? "Instantly Run Web App in Browser" : "Run Web App in Browser"}
+          >
+            {graph.nodes.some(n => n.label === 'File' && n.properties.name === 'gitnexus.json') ? (
+              <>
+                <Zap className="w-4 h-4 fill-current text-yellow-100" />
+                <span>Instant Run</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 fill-current" />
+                <span>Run App</span>
+              </>
+            )}
+          </button>
+        )}
 
         {/* AI Button */}
         <button

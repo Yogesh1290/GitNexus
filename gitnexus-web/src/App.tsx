@@ -9,6 +9,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { StatusBar } from './components/StatusBar';
 import { FileTreePanel } from './components/FileTreePanel';
 import { CodeReferencesPanel } from './components/CodeReferencesPanel';
+import { WebContainerPanel } from './components/WebContainerPanel';
 import { getActiveProviderConfig } from './core/llm/settings-service';
 import { createKnowledgeGraph } from './core/graph/graph';
 import {
@@ -305,6 +306,8 @@ const AppContent = () => {
         onClose={() => setSettingsPanelOpen(false)}
         onSettingsSaved={handleSettingsSaved}
       />
+      {/* WebContainer App Execution Panel */}
+      <WebContainerPanel />
     </div>
   );
 };
