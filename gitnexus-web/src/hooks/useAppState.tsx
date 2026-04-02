@@ -1037,83 +1037,111 @@ const AppStateProviderInner = ({ children }: { children: ReactNode }) => {
       setCodePanelOpen(false);
       setCodeReferenceFocus(null);
 
-      try {
-        const result: ConnectResult = await connectToServer(
-          serverBaseUrl,
-          (phase, downloaded, total) => {
-            if (phase === 'validating') {
-              setProgress({
-                phase: 'extracting',
-                percent: 5,
-                message: 'Switching repository...',
-                detail: 'Validating',
-              });
-            } else if (phase === 'downloading') {
-              const pct = total ? Math.round((downloaded / total) * 90) + 5 : 50;
-              const mb = (downloaded / (1024 * 1024)).toFixed(1);
-              setProgress({
-                phase: 'extracting',
-                percent: pct,
-                message: 'Downloading graph...',
-                detail: `${mb} MB downloaded`,
-              });
-            } else if (phase === 'extracting') {
-              setProgress({
-                phase: 'extracting',
-                percent: 97,
-                message: 'Processing...',
-                detail: 'Extracting file contents',
-              });
-            }
-          },
-          undefined,
-          repoName,
-        );
+      let connectedRepo: BackendRepo | undefined;
+      let pNameStr = repoName || 'server-project';
 
-        // Build graph for visualization
-        const repoPath = result.repoInfo.repoPath ?? result.repoInfo.path;
-        const pName =
-          repoName || result.repoInfo.name || repoPath?.split('/').pop() || 'server-project';
-        setProjectName(pName);
-        repoRef.current = pName;
-
-        const newGraph = createKnowledgeGraph();
-        for (const node of result.nodes) newGraph.addNode(node);
-        for (const rel of result.relationships) newGraph.addRelationship(rel);
-        setGraph(newGraph);
-
-        // No fileContents needed — grep/read tools use backend HTTP
-
-        // Initialize agent with backend queries, then start embeddings
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          if (getActiveProviderConfig()) {
-            await initializeAgent(pName);
+          const result: ConnectResult = await connectToServer(
+            serverBaseUrl,
+            (phase, downloaded, total) => {
+              if (phase === 'validating') {
+                setProgress({
+                  phase: 'extracting',
+                  percent: 5,
+                  message: 'Switching repository...',
+                  detail: 'Validating',
+                });
+              } else if (phase === 'downloading') {
+                const pct = total ? Math.round((downloaded / total) * 90) + 5 : 50;
+                const mb = (downloaded / (1024 * 1024)).toFixed(1);
+                setProgress({
+                  phase: 'extracting',
+                  percent: pct,
+                  message: 'Downloading graph...',
+                  detail: `${mb} MB downloaded`,
+                });
+              } else if (phase === 'extracting') {
+                setProgress({
+                  phase: 'extracting',
+                  percent: 97,
+                  message: 'Processing...',
+                  detail: 'Extracting file contents',
+                });
+              }
+            },
+            undefined,
+            repoName,
+          );
+
+          // Build graph for visualization
+          const repoPath = result.repoInfo.repoPath ?? result.repoInfo.path;
+          const pName =
+            repoName || result.repoInfo.name || repoPath?.split('/').pop() || 'server-project';
+          setProjectName(pName);
+          repoRef.current = pName;
+          
+          connectedRepo = result.repoInfo;
+          pNameStr = pName;
+
+          const newGraph = createKnowledgeGraph();
+          for (const node of result.nodes) newGraph.addNode(node);
+          for (const rel of result.relationships) newGraph.addRelationship(rel);
+          setGraph(newGraph);
+          
+          break; // Success! Break out of retry loop.
+        } catch (err: unknown) {
+          if (attempt < 2 && err instanceof BackendError && err.status === 404) {
+            setProgress({
+              phase: 'extracting',
+              percent: 0,
+              message: 'Syncing project data...',
+              detail: `Retrying connection (Attempt ${attempt + 1})`,
+            });
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
           }
-          setViewMode('exploring');
-          startEmbeddingsWithFallback();
-          setProgress(null);
-        } catch (err) {
-          console.warn('Failed to initialize agent:', err);
+          
+          console.error('Repo switch failed:', err);
+          setProgress({
+            phase: 'error',
+            percent: 0,
+            message: 'Failed to switch repository',
+            detail: err instanceof Error ? err.message : 'Unknown error',
+          });
           setIsAgentReady(false);
           agentRef.current = null;
-          setAgentError('Failed to initialize agent');
-          setViewMode('exploring');
-          setProgress(null);
+          setTimeout(() => {
+            setViewMode('exploring');
+            setProgress(null);
+          }, ERROR_RESET_DELAY_MS);
+          
+          return; // Abort the whole switchRepo process
         }
+      }
+
+      if (connectedRepo) {
+        // Persist the selected project in the URL so a refresh re-opens it
+        const urlObj = new URL(window.location.href);
+        urlObj.searchParams.set('project', connectedRepo.name);
+        window.history.replaceState(null, '', urlObj.toString());
+      }
+
+      // Initialize agent with backend queries, then start embeddings
+      try {
+        if (getActiveProviderConfig()) {
+          await initializeAgent(pNameStr);
+        }
+        setViewMode('exploring');
+        startEmbeddingsWithFallback();
+        setProgress(null);
       } catch (err) {
-        console.error('Repo switch failed:', err);
-        setProgress({
-          phase: 'error',
-          percent: 0,
-          message: 'Failed to switch repository',
-          detail: err instanceof Error ? err.message : 'Unknown error',
-        });
+        console.warn('Failed to initialize agent:', err);
         setIsAgentReady(false);
         agentRef.current = null;
-        setTimeout(() => {
-          setViewMode('exploring');
-          setProgress(null);
-        }, ERROR_RESET_DELAY_MS);
+        setAgentError('Failed to initialize agent');
+        setViewMode('exploring');
+        setProgress(null);
       }
     },
     [

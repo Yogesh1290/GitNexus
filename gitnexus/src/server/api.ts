@@ -312,11 +312,48 @@ export const createServer = async (port: number, host: string = '127.0.0.1') => 
   };
 
   // Helper: resolve a repo by name from the global registry, or default to first
-  const resolveRepo = async (repoName?: string) => {
+  const resolveRepo = async (repoName?: string, isRetry = false): Promise<any> => {
     const repos = await listRegisteredRepos();
-    if (repos.length === 0) return null;
-    if (repoName) return repos.find((r) => r.name === repoName) || null;
-    return repos[0]; // default to first
+    let found = null;
+    
+    if (repoName) {
+      found = repos.find((r) => r.name === repoName) || null;
+    } else if (repos.length > 0) {
+      found = repos[0]; // default to first
+    }
+    
+    // Auto-wait for active jobs if the repo is not found
+    if (!found && repoName) {
+      const lower = repoName.toLowerCase();
+      for (const job of (jobManager as any).jobs.values()) {
+        const isMatch = job.repoName?.toLowerCase() === lower || 
+                        (job.repoUrl && path.basename(job.repoUrl).replace('.git', '').toLowerCase() === lower) ||
+                        (job.repoPath && path.basename(job.repoPath).toLowerCase() === lower);
+        
+        if (isMatch && ['queued', 'cloning', 'analyzing', 'complete'].includes(job.status)) {
+          console.log(`[debug] resolveRepo waiting for active job ${job.id} to finish for ${repoName}...`);
+          for (let wait = 0; wait < 300; wait++) {
+            const currentJob = jobManager.getJob(job.id);
+            if (!currentJob || currentJob.status === 'failed') break;
+            if (currentJob.status === 'complete') {
+              await backend.init();
+              const freshRepos = await listRegisteredRepos();
+              return freshRepos.find((r) => r.name === repoName) || null;
+            }
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+      }
+    }
+    
+    // Emergency deep init fallback (fixes race conditions on Windows)
+    if (!found && repoName && !isRetry) {
+      console.log(`[debug] resolveRepo 404 for "${repoName}". Triggering deep init...`);
+      await backend.init();
+      return await resolveRepo(repoName, true);
+    }
+    
+    return found;
   };
 
   // SSE heartbeat — clients connect to detect server liveness instantly.

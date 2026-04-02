@@ -376,7 +376,8 @@ export const fetchRepos = async (): Promise<BackendRepo[]> => {
 /** Fetch repo metadata. */
 export const fetchRepoInfo = async (repo?: string): Promise<BackendRepo> => {
   const url = `${_backendUrl}/api/repo${repo ? `?${repoParam(repo)}` : ''}`;
-  const response = await fetchWithTimeout(url);
+  // Use a 5-minute timeout (300,000ms) to allow the backend to wait if the repository is currently being analyzed
+  const response = await fetchWithTimeout(url, {}, 300_000);
   await assertOk(response);
   const data = await response.json();
   return { ...data, repoPath: data.repoPath ?? data.path };

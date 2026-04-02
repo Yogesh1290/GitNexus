@@ -83,17 +83,25 @@ const AppContent = () => {
     [setViewMode, setGraph, setProjectName, initializeAgent, startEmbeddingsWithFallback],
   );
 
-  // Auto-connect when ?server query param is present (bookmarkable shortcut)
+  // Auto-connect when ?server or ?project query param is present (bookmarkable shortcut)
   const autoConnectRan = useRef(false);
   useEffect(() => {
     if (autoConnectRan.current) return;
     const params = new URLSearchParams(window.location.search);
-    if (!params.has('server')) return;
+    const serverUrlParam = params.get('server');
+    const projectParam = params.get('project');
+    
+    if (!serverUrlParam && !projectParam) return;
     autoConnectRan.current = true;
 
-    // Clean the URL so a refresh won't re-trigger
-    const cleanUrl = window.location.pathname + window.location.hash;
-    window.history.replaceState(null, '', cleanUrl);
+    // Clean the "server" param so a refresh won't re-trigger it redundantly, 
+    // but keep the "project" param so the user has a shareable URL.
+    if (serverUrlParam) {
+      params.delete('server');
+      const newSearch = params.toString();
+      const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+      window.history.replaceState(null, '', cleanUrl);
+    }
 
     setProgress({
       phase: 'extracting',
@@ -103,36 +111,56 @@ const AppContent = () => {
     });
     setViewMode('loading');
 
-    const serverUrl = params.get('server') || window.location.origin;
-
+    const serverUrl = serverUrlParam || window.location.origin;
     const baseUrl = normalizeServerUrl(serverUrl);
 
-    connectToServer(serverUrl, (phase, downloaded, total) => {
-      if (phase === 'validating') {
-        setProgress({
-          phase: 'extracting',
-          percent: 5,
-          message: 'Connecting to server...',
-          detail: 'Validating server',
-        });
-      } else if (phase === 'downloading') {
-        const pct = total ? Math.round((downloaded / total) * 90) + 5 : 50;
-        const mb = (downloaded / (1024 * 1024)).toFixed(1);
-        setProgress({
-          phase: 'extracting',
-          percent: pct,
-          message: 'Downloading graph...',
-          detail: `${mb} MB downloaded`,
-        });
-      } else if (phase === 'extracting') {
-        setProgress({
-          phase: 'extracting',
-          percent: 97,
-          message: 'Processing...',
-          detail: 'Extracting file contents',
-        });
+    const tryConnect = async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await connectToServer(serverUrl, (phase, downloaded, total) => {
+            if (phase === 'validating') {
+              setProgress({
+                phase: 'extracting',
+                percent: 5,
+                message: 'Connecting to server...',
+                detail: 'Validating server',
+              });
+            } else if (phase === 'downloading') {
+              const pct = total ? Math.round((downloaded / total) * 90) + 5 : 50;
+              const mb = (downloaded / (1024 * 1024)).toFixed(1);
+              setProgress({
+                phase: 'extracting',
+                percent: pct,
+                message: 'Downloading graph...',
+                detail: `${mb} MB downloaded`,
+              });
+            } else if (phase === 'extracting') {
+              setProgress({
+                phase: 'extracting',
+                percent: 97,
+                message: 'Processing...',
+                detail: 'Extracting file contents',
+              });
+            }
+          }, undefined, projectParam ?? undefined);
+        } catch (err: unknown) {
+          if (attempt < 2 && err instanceof BackendError && err.status === 404) {
+             setProgress({
+               phase: 'extracting',
+               percent: 0,
+               message: 'Syncing project data...',
+               detail: `Retrying connection (Attempt ${attempt + 1})`,
+             });
+             await new Promise((r) => setTimeout(r, 2000));
+             continue;
+          }
+          throw err;
+        }
       }
-    })
+      throw new Error("Failed to connect");
+    };
+
+    tryConnect()
       .then(async (result) => {
         await handleServerConnect(result);
         setProgress(null);
