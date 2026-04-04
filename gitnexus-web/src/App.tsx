@@ -113,16 +113,6 @@ const AppContent = () => {
     if (!serverUrlParam && !projectParam) return;
     autoConnectRan.current = true;
 
-    // Clean the "server" param so a refresh won't re-trigger it redundantly,
-    // but keep the "project" param so the user has a shareable URL.
-    if (serverUrlParam) {
-      params.delete('server');
-      const newSearch = params.toString();
-      const cleanUrl =
-        window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
-      window.history.replaceState(null, '', cleanUrl);
-    }
-
     setProgress({
       phase: 'extracting',
       percent: 0,
